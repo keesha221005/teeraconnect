@@ -1,0 +1,87 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String         @id @default(uuid())
+  phone         String         @unique
+  name          String
+  languagePref  String         @default("en")
+  role          String         @default("fisher") // "fisher", "buyer", "admin"
+  userType      String         @default("fisher") // "fisher", "buyer", "admin"
+  boatType      String?        // e.g. "Mechanized Trawler", "Country Boat"
+  companyName   String?        // For Seafood Buyers / Traders
+  harbor        String?        // Home harbor
+  isVerified    Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  catchReports  CatchReport[]
+  purchaseDeals PurchaseDeal[] @relation("BuyerDeals")
+}
+
+model CatchReport {
+  id            String         @id @default(uuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fishType      String
+  quantityKg    Float
+  location      String
+  imageUrl      String?      
+  createdAt     DateTime       @default(now())
+  purchaseDeals PurchaseDeal[]
+
+  @@index([location])
+}
+
+model PurchaseDeal {
+  id                 String      @id @default(uuid())
+  catchReportId      String
+  catchReport        CatchReport @relation(fields: [catchReportId], references: [id], onDelete: Cascade)
+  buyerId            String
+  buyer              User        @relation("BuyerDeals", fields: [buyerId], references: [id], onDelete: Cascade)
+  proposedPricePerKg Float
+  requestedQtyKg     Float
+  status             String      @default("pending") // "pending", "accepted", "declined"
+  notes              String?
+  createdAt          DateTime    @default(now())
+
+  @@index([catchReportId])
+  @@index([buyerId])
+}
+
+model MarketPrice {
+  id         String   @id @default(uuid())
+  fishType   String
+  pricePerKg Float
+  location   String
+  postedBy   String
+  date       DateTime @default(now())
+
+  @@index([location])
+}
+
+model Alert {
+  id        String   @id @default(uuid())
+  title     String
+  body      String
+  severity  String
+  region    String
+  postedBy  String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt, region])
+}
+
+model FishingZone {
+  id     String @id @default(uuid())
+  name   String
+  lat    Float
+  lng    Float
+  status String
+  notes  String
+}

@@ -1,0 +1,3 @@
+why is ther a report catch option for the buyer, remove that that should be present only for the fisher
+there is no admin option too for the admin llogin and management 
+after logging in and going to community page the login button should be replaced with the profile of the user

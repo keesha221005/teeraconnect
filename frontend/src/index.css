@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-ocean-bg text-ocean-dark font-sans antialiased selection:bg-ocean-teal/20;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Make sure all inputs have high visibility borders */
+  input, select, textarea {
+    @apply border-2 border-stone-300 focus:border-ocean-teal focus:ring-2 focus:ring-ocean-teal/20 focus:outline-none rounded-lg p-3 text-lg bg-white text-ocean-dark transition-all;
+  }
+}
+
+/* Custom styles for Leaflet map to integrate beautifully */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  border: 2px solid #E7E5E4;
+}
+
+/* Hide default leaflet attribution styling details */
+.leaflet-control-attribution {
+  font-size: 9px !important;
+}
+
+/* Make taps/clicks feel extremely premium and responsive */
+.active-nav-item {
+  @apply text-ocean-teal border-t-4 border-ocean-teal font-bold bg-ocean-teal/5;
+}
+
+/* Large, easy to press buttons */
+.btn-primary {
+  @apply bg-ocean-teal text-white font-semibold py-4 px-6 rounded-xl hover:bg-opacity-90 active:scale-95 transition-all text-center flex items-center justify-center gap-2 text-lg shadow-md;
+}
+
+.btn-secondary {
+  @apply bg-stone-200 text-stone-800 font-semibold py-4 px-6 rounded-xl hover:bg-stone-300 active:scale-95 transition-all text-center flex items-center justify-center gap-2 text-lg border-2 border-stone-300;
+}
+
+.btn-danger {
+  @apply bg-ocean-red text-white font-semibold py-4 px-6 rounded-xl hover:bg-opacity-90 active:scale-95 transition-all text-center flex items-center justify-center gap-2 text-lg shadow-md;
+}
+
+/* Premium Card Design with smooth transitions */
+.ocean-card {
+  @apply bg-white border-2 border-stone-200/80 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-stone-300/85 transition-all duration-300;
+}
+
+/* Disable scrollbars on forecasts but allow horizontal panning */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
