@@ -84,10 +84,9 @@ export default function App() {
   const [regBoatType, setRegBoatType] = useState('Mechanized Trawler');
   const [regCompanyName, setRegCompanyName] = useState('');
   const [regHarbor, setRegHarbor] = useState('Mangalore Harbor');
-  const [otpRequested, setOtpRequested] = useState(false);
-  const [otp, setOtp] = useState('');
+  const [authMode, setAuthMode] = useState('register'); // 'register' or 'login'
+  const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
-  const [devOtpMessage, setDevOtpMessage] = useState('');
 
   // Hydrate user from localStorage
   useEffect(() => {
@@ -322,22 +321,31 @@ export default function App() {
   }, [selectedLocation]);
 
   // Auth Operations
-  const handleRequestOtp = async (e) => {
+  // Auth Operations
+  const resetAuthForm = () => {
+    setPhone('');
+    setName('');
+    setPassword('');
+    setAuthError('');
+  };
+
+  const handleRegister = async (e) => {
     e.preventDefault();
     const cleanPhone = phone.trim();
     const cleanName = name.trim();
-    if (!cleanPhone) {
-      setAuthError('Phone number is required');
+    if (!cleanPhone || !cleanName || !password) {
+      setAuthError('Name, phone number, and password are required');
       return;
     }
     setLoading(true);
     setAuthError('');
     try {
-      const res = await fetch(`${API_BASE}/auth/request-otp`, {
+      const res = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: cleanPhone,
+          password,
           name: cleanName,
           role: regRole,
           userType: regRole,
@@ -346,94 +354,48 @@ export default function App() {
           harbor: regRole === 'admin' ? null : regHarbor
         })
       });
+      const data = await res.json();
       if (res.ok) {
-        setOtpRequested(true);
-        setDevOtpMessage('OTP code printed to backend terminal console. Enter OTP to complete.');
+        setUser(data.user);
+        localStorage.setItem('teeraconnect_user', JSON.stringify(data.user));
+        setShowLoginModal(false);
+        resetAuthForm();
       } else {
-        const data = await res.json();
-        setAuthError(data.error || 'Failed to send OTP');
+        setAuthError(data.error || 'Registration failed');
       }
     } catch (err) {
-      setOtpRequested(true);
-      setDevOtpMessage('Offline mode active. Input code 1234 to bypass.');
+      setAuthError('Could not reach the server. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerifyOtp = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     const cleanPhone = phone.trim();
-    const cleanOtp = otp.trim();
-    const cleanName = name.trim();
-    if (!cleanOtp) {
-      setAuthError('Please enter the OTP verification code');
+    if (!cleanPhone || !password) {
+      setAuthError('Phone number and password are required');
       return;
     }
     setLoading(true);
     setAuthError('');
     try {
-      const res = await fetch(`${API_BASE}/auth/verify-otp`, {
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp })
+        body: JSON.stringify({ phone: cleanPhone, password })
       });
       const data = await res.json();
       if (res.ok) {
         setUser(data.user);
         localStorage.setItem('teeraconnect_user', JSON.stringify(data.user));
         setShowLoginModal(false);
-        setOtpRequested(false);
-        setPhone('');
-        setName('');
-        setOtp('');
+        resetAuthForm();
       } else {
-        if (cleanOtp === '1234' || (data.error && data.error.includes('Can\'t reach database server'))) {
-          const offlineUser = {
-            id: 'dev-user-' + cleanPhone,
-            name: cleanName || (regRole === 'buyer' ? 'Seafood Buyer' : 'Fisherman') + ' ' + (cleanPhone.length >= 4 ? cleanPhone.substring(cleanPhone.length - 4) : '1234'),
-            phone: cleanPhone,
-            role: cleanPhone === '9999999999' ? 'admin' : regRole,
-            userType: cleanPhone === '9999999999' ? 'admin' : regRole,
-            boatType: regRole === 'fisher' ? regBoatType : null,
-            companyName: regRole === 'buyer' ? regCompanyName : null,
-            harbor: regRole === 'admin' ? null : regHarbor,
-            isVerified: true
-          };
-          setUser(offlineUser);
-          localStorage.setItem('teeraconnect_user', JSON.stringify(offlineUser));
-          setShowLoginModal(false);
-          setOtpRequested(false);
-          setPhone('');
-          setName('');
-          setOtp('');
-        } else {
-          setAuthError(data.error || 'Invalid OTP verification code');
-        }
+        setAuthError(data.error || 'Invalid phone number or password');
       }
     } catch (err) {
-      if (cleanOtp === '1234' || cleanOtp.length === 4) {
-        const offlineUser = {
-          id: 'offline-id-' + cleanPhone,
-          name: cleanName || (regRole === 'buyer' ? 'Seafood Buyer' : 'Fisherman') + ' ' + (cleanPhone.length >= 4 ? cleanPhone.substring(cleanPhone.length - 4) : '1234'),
-          phone: cleanPhone,
-          role: cleanPhone === '9999999999' ? 'admin' : regRole,
-          userType: cleanPhone === '9999999999' ? 'admin' : regRole,
-          boatType: regRole === 'fisher' ? regBoatType : null,
-          companyName: regRole === 'buyer' ? regCompanyName : null,
-           harbor: regRole === 'admin' ? null : regHarbor,
-            isVerified: true
-          };
-          setUser(offlineUser);
-        localStorage.setItem('teeraconnect_user', JSON.stringify(offlineUser));
-        setShowLoginModal(false);
-        setOtpRequested(false);
-        setPhone('');
-        setName('');
-        setOtp('');
-      } else {
-        setAuthError('Offline OTP code is 1234');
-      }
+      setAuthError('Could not reach the server. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -655,8 +617,8 @@ export default function App() {
           <button
             onClick={() => setActiveTab('admin')}
             className={`p-2 border rounded-xl flex items-center justify-center font-bold text-xs gap-1 transition-all ${activeTab === 'admin'
-                ? 'bg-stone-900 text-white border-stone-900 shadow-md font-extrabold'
-                : 'bg-stone-100 hover:bg-stone-200 border-stone-200 text-stone-700'
+              ? 'bg-stone-900 text-white border-stone-900 shadow-md font-extrabold'
+              : 'bg-stone-100 hover:bg-stone-200 border-stone-200 text-stone-700'
               }`}
             title="Fisheries Admin Console"
           >
@@ -734,10 +696,10 @@ export default function App() {
           <div
             key={alert.id}
             className={`p-4 border-2 rounded-2xl flex items-start gap-3 shadow-md ${alert.severity === 'danger'
-                ? 'bg-rose-50 border-rose-400 text-rose-950'
-                : alert.severity === 'warning'
-                  ? 'bg-amber-50 border-amber-400 text-amber-950'
-                  : 'bg-blue-50 border-blue-400 text-blue-950'
+              ? 'bg-rose-50 border-rose-400 text-rose-950'
+              : alert.severity === 'warning'
+                ? 'bg-amber-50 border-amber-400 text-amber-950'
+                : 'bg-blue-50 border-blue-400 text-blue-950'
               }`}
           >
             <AlertTriangle className={`stroke-[2.5] flex-shrink-0 ${alert.severity === 'danger' ? 'text-ocean-red' : alert.severity === 'warning' ? 'text-ocean-sandy' : 'text-blue-500'
@@ -819,25 +781,25 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'admin' && (
+                {activeTab === 'admin' && (
           <AdminPanel
             user={user}
-            onLogin={async (phone, bypassOtp) => {
+            onLogin={async (phone, pwd) => {
               try {
-                const res = await fetch(`${API_BASE}/auth/verify-otp`, {
+                const res = await fetch(`${API_BASE}/auth/login`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ phone, otp: bypassOtp })
+                  body: JSON.stringify({ phone, password: pwd })
                 });
                 const data = await res.json();
-                if (res.ok) {
+                if (res.ok && data.user.role === 'admin') {
                   setUser(data.user);
                   localStorage.setItem('teeraconnect_user', JSON.stringify(data.user));
+                  return true;
                 }
+                return false;
               } catch (err) {
-                const adminProfile = { id: 'offline-admin-id', name: 'Co-op Officer', phone, role: 'admin' };
-                setUser(adminProfile);
-                localStorage.setItem('teeraconnect_user', JSON.stringify(adminProfile));
+                return false;
               }
             }}
             onLogout={handleLogout}
@@ -941,11 +903,7 @@ export default function App() {
             <button
               onClick={() => {
                 setShowLoginModal(false);
-                setOtpRequested(false);
-                setAuthError('');
-                setPhone('');
-                setName('');
-                setOtp('');
+                resetAuthForm();
               }}
               className="absolute top-4 right-4 w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 border border-stone-200 flex items-center justify-center font-bold text-stone-600"
             >
@@ -966,14 +924,25 @@ export default function App() {
               </p>
             )}
 
-            {devOtpMessage && (
-              <p className="text-xs text-emerald-900 font-bold bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl">
-                {devOtpMessage}
-              </p>
-            )}
+            <div className="flex bg-stone-100 p-1 rounded-2xl border border-stone-200 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => { setAuthMode('register'); setAuthError(''); }}
+                className={`flex-1 py-2 rounded-xl transition-all ${authMode === 'register' ? 'bg-white text-ocean-teal shadow-md font-extrabold' : 'text-stone-500'}`}
+              >
+                Register
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAuthMode('login'); setAuthError(''); }}
+                className={`flex-1 py-2 rounded-xl transition-all ${authMode === 'login' ? 'bg-white text-ocean-teal shadow-md font-extrabold' : 'text-stone-500'}`}
+              >
+                Log In
+              </button>
+            </div>
 
-            {!otpRequested ? (
-              <form onSubmit={handleRequestOtp} className="space-y-3">
+            {authMode === 'register' ? (
+              <form onSubmit={handleRegister} className="space-y-3">
                 {/* Role Selector Tabs */}
                 <div className="grid grid-cols-3 gap-1 bg-stone-100 p-1 rounded-2xl border border-stone-200 text-[10px] font-bold">
                   <button
@@ -1078,37 +1047,46 @@ export default function App() {
                   />
                 </div>
 
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-stone-600">Password</label>
+                  <input
+                    type="password"
+                    placeholder="Choose a password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
                 <button type="submit" className="w-full btn-primary py-3.5 mt-2">
-                  Request Verification Code
+                  Create Account
                 </button>
               </form>
             ) : (
-              <form onSubmit={handleVerifyOtp} className="space-y-3">
-                <div className="flex flex-col gap-1 text-center bg-stone-50 border border-stone-200 py-2 rounded-xl mb-2">
-                  <span className="text-xs font-bold text-stone-500">Verifying {regRole.toUpperCase()} Account</span>
-                  <span className="text-md font-extrabold text-stone-800">{phone}</span>
+              <form onSubmit={handleLogin} className="space-y-3">
+                                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-stone-600">Phone Number</label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. 9876543210"
+                    pattern="[0-9]{10}"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    required
+                  />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-stone-600">Enter 4-Digit Code</label>
+                  <label className="text-xs font-bold text-stone-600">Password</label>
                   <input
-                    type="text"
-                    placeholder="e.g. 1234"
-                    maxLength={4}
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    className="text-center text-xl font-bold tracking-widest"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     required
                   />
                 </div>
                 <button type="submit" className="w-full btn-primary py-3.5 mt-2">
-                  Verify & Enter Portal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOtpRequested(false)}
-                  className="w-full text-xs font-bold text-ocean-teal hover:underline text-center mt-2 block"
-                >
-                  Back to register form
+                  Log In
                 </button>
               </form>
             )}

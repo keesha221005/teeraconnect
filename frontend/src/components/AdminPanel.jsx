@@ -59,13 +59,12 @@ export default function AdminPanel({
   // User Filter State
   const [userRoleFilter, setUserRoleFilter] = useState('all'); // all, fisher, buyer
 
-  const handleLoginSubmit = (e) => {
+    const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    if (password === 'admin123') {
-      setError('');
-      onLogin(phone, '1234');
-    } else {
-      setError('Incorrect admin password. Use "admin123".');
+    setError('');
+    const ok = await onLogin(phone, password);
+    if (!ok) {
+      setError('Incorrect phone number or password.');
     }
   };
 
@@ -162,7 +161,7 @@ export default function AdminPanel({
             <label className="text-xs font-bold text-stone-600">{t('adminPassword')}</label>
             <input
               type="password"
-              placeholder="e.g. admin123"
+              placeholder="Enter admin password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="bg-stone-50 border-2 border-stone-200 p-2.5 rounded-xl font-bold text-stone-800"

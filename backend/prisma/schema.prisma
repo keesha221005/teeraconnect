@@ -10,6 +10,7 @@ generator client {
 model User {
   id            String         @id @default(uuid())
   phone         String         @unique
+  password      String
   name          String
   languagePref  String         @default("en")
   role          String         @default("fisher") // "fisher", "buyer", "admin"

@@ -1,122 +1,84 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { getWeatherData, getForecastData, locationsCoordinates } from '../utils/weather.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// In-memory store for OTPs in development
-const otpStore = new Map();
-
 // 1. AUTHENTICATION FLOW
-// POST /api/auth/request-otp
-router.post('/auth/request-otp', async (req, res) => {
+// POST /api/auth/register
+router.post('/auth/register', async (req, res) => {
   try {
-    const { phone, name, role, userType, boatType, companyName, harbor } = req.body;
-    if (!phone) {
-      return res.status(400).json({ error: 'Phone number is required' });
+    const { phone, password, name, role, userType, boatType, companyName, harbor } = req.body;
+
+    if (!phone || !password || !name) {
+      return res.status(400).json({ error: 'Phone, password, and name are required' });
+    }
+    if (String(password).length < 4) {
+      return res.status(400).json({ error: 'Password must be at least 4 characters' });
     }
 
     const cleanPhone = String(phone).trim();
-    const cleanName = name ? String(name).trim() : '';
-
-    // Generate a simple 4-digit OTP
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    const cleanName = String(name).trim();
     const userRole = role || userType || (cleanPhone === '9999999999' ? 'admin' : 'fisher');
 
-    otpStore.set(cleanPhone, { 
-      otp, 
-      name: cleanName, 
-      role: userRole,
-      userType: userRole,
-      boatType: boatType ? String(boatType).trim() : null,
-      companyName: companyName ? String(companyName).trim() : null,
-      harbor: harbor ? String(harbor).trim() : null,
-      expires: Date.now() + 5 * 60 * 1000 
+    const existing = await prisma.user.findUnique({ where: { phone: cleanPhone } });
+    if (existing) {
+      return res.status(409).json({ error: 'An account with this phone number already exists. Please log in instead.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(String(password), 10);
+
+    const user = await prisma.user.create({
+      data: {
+        phone: cleanPhone,
+        password: hashedPassword,
+        name: cleanName,
+        role: userRole,
+        userType: userRole,
+        boatType: boatType ? String(boatType).trim() : null,
+        companyName: companyName ? String(companyName).trim() : null,
+        harbor: harbor ? String(harbor).trim() : null,
+        isVerified: true
+      }
     });
 
-    console.log(`\n================================================`);
-    console.log(`[DEV OTP SYSTEM] SMS to ${cleanPhone} (${userRole})`);
-    console.log(`Your TeeraConnect Verification Code is: ${otp}`);
-    console.log(`================================================\n`);
-
-    res.json({ message: 'OTP sent successfully. Check your terminal/console.', phone: cleanPhone });
+    const { password: _pw, ...safeUser } = user;
+    res.status(201).json({ message: 'Registration successful', user: safeUser });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to request OTP: ' + error.message });
+    res.status(500).json({ error: 'Failed to register: ' + error.message });
   }
 });
 
-// POST /api/auth/verify-otp
-router.post('/auth/verify-otp', async (req, res) => {
+// POST /api/auth/login
+router.post('/auth/login', async (req, res) => {
   try {
-    const { phone, otp } = req.body;
-    if (!phone || !otp) {
-      return res.status(400).json({ error: 'Phone and OTP are required' });
+    const { phone, password } = req.body;
+    if (!phone || !password) {
+      return res.status(400).json({ error: 'Phone and password are required' });
     }
 
     const cleanPhone = String(phone).trim();
-    const cleanOtp = String(otp).trim();
+    const user = await prisma.user.findUnique({ where: { phone: cleanPhone } });
 
-    const cached = otpStore.get(cleanPhone) || {};
-    if (cleanOtp !== '1234' && (!cached.otp || cached.expires < Date.now())) {
-      return res.status(400).json({ error: 'OTP expired or not requested' });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid phone number or password' });
     }
 
-    // Accept 1234 as bypass code for easy testing, or match OTP
-    if (cleanOtp !== String(cached.otp).trim() && cleanOtp !== '1234') {
-      return res.status(400).json({ error: 'Invalid verification code' });
+    const passwordMatches = await bcrypt.compare(String(password), user.password);
+    if (!passwordMatches) {
+      return res.status(401).json({ error: 'Invalid phone number or password' });
     }
 
-    // Clear verification session
-    otpStore.delete(cleanPhone);
-
-    const userRole = cached.role || (cleanPhone === '9999999999' ? 'admin' : 'fisher');
-
-    // Upsert user in db, with offline fallback if DB is unreachable
-    let user = null;
-    try {
-      user = await prisma.user.findUnique({
-        where: { phone: cleanPhone }
-      });
-
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            phone: cleanPhone,
-            name: cached.name || (userRole === 'buyer' ? 'Seafood Buyer' : 'Fisherman') + ' ' + (cleanPhone.length >= 4 ? cleanPhone.substring(cleanPhone.length - 4) : '1234'),
-            role: userRole,
-            userType: userRole,
-            boatType: cached.boatType || null,
-            companyName: cached.companyName || null,
-            harbor: cached.harbor || null,
-            isVerified: true
-          }
-        });
-      }
-    } catch (dbErr) {
-      console.warn('[DEV AUTH] Database query failed or offline. Returning fallback user profile:', dbErr.message);
-      user = {
-        id: `dev-user-${cleanPhone}`,
-        phone: cleanPhone,
-        name: cached.name || (userRole === 'buyer' ? 'Seafood Buyer' : 'Fisherman') + ' ' + (cleanPhone.length >= 4 ? cleanPhone.substring(cleanPhone.length - 4) : '1234'),
-        role: userRole,
-        userType: userRole,
-        boatType: cached.boatType || null,
-        companyName: cached.companyName || null,
-        harbor: cached.harbor || null,
-        isVerified: true
-      };
-    }
-
-    res.json({
-      message: 'Authentication successful',
-      token: `mock-jwt-token-for-${user.id}`,
-      user
-    });
+    const { password: _pw, ...safeUser } = user;
+    res.json({ message: 'Login successful', user: safeUser });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to verify OTP: ' + error.message });
+    res.status(500).json({ error: 'Failed to log in: ' + error.message });
   }
 });
+
+// 2. WEATHER & SEA CONDITIONS
 
 // 2. WEATHER & SEA CONDITIONS
 // GET /api/weather/current
